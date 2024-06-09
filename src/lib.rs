@@ -52,13 +52,13 @@ impl BitPack {
         
         let can_fit : bool = self.last_byte_size_remaining >= to_alloc_size;
         let mut result: usize = 0;
-        let starting_index: usize = self.bytes.len() - 1;
+        let mut starting_index: usize = self.bytes.len() - 1;
 
         if !(can_fit) {
             println!("make new space!!! but how many??");
-
             result = (to_alloc_size as f32 / 8f32).ceil() as usize;
             self.bytes.extend(vec![0; result]);
+            starting_index = self.bytes.len() - 1;
             self.last_byte_size_remaining += 8 * result as u8;
         }
 
@@ -201,62 +201,74 @@ mod test {
         });
     }
 
-    // #[test]
-    // fn insert_data_three_datas() {
-    //     let mut bit_pack : BitPack = BitPack::new();
-    //     bit_pack.set("Hello", 4, 7);
+    #[test]
+    fn insert_data_three_datas() {
+        let mut bit_pack : BitPack = BitPack::new();
+        bit_pack.set("Hello", 4, 7);
         
-    //     assert_eq!(bit_pack.get_bit_info(0), &BitInfo {
-    //         ending_bit_mask
-    //         starting_array_index_inc: 0,
-    //         ending_array_index_exc: 1
-    //     });
+        assert_eq!(bit_pack.get_bit_info(0), &BitInfo {
+            starting_bit_mask : 0b0000_1111,
+            ending_bit_mask : 0b0000_1111,
+            starting_array_index_inc: 0,
+            ending_array_index_exc: 1
+        });
 
-    //     bit_pack.set("World", 4, 6);
+        bit_pack.set("World", 4, 6);
 
-    //     assert_eq!(bit_pack.get_bit_info(1), &BitInfo {
-    //         starting_array_index_inc: 0,
-    //         ending_array_index_exc: 1
-    //     });
+        assert_eq!(bit_pack.get_bit_info(1), &BitInfo {
+            starting_bit_mask : 0b1111_0000,
+            ending_bit_mask : 0b1111_0000,
+            starting_array_index_inc: 0,
+            ending_array_index_exc: 1
+        });
 
-    //     bit_pack.set("Zack", 4, 3);
+        bit_pack.set("Zack", 4, 3);
 
-    //     assert_eq!(bit_pack.get_bit_info(2), &BitInfo {
-    //         starting_array_index_inc: 1,
-    //         ending_array_index_exc: 2
-    //     });
-    // }
+        assert_eq!(bit_pack.get_bit_info(2), &BitInfo {
+            starting_bit_mask : 0b0000_1111,
+            ending_bit_mask : 0b0000_1111,
+            starting_array_index_inc: 1,
+            ending_array_index_exc: 2
+        });
+    }
 
-    // #[test]
-    // fn insert_data_four_datas() {
-    //     let mut bit_pack : BitPack = BitPack::new();
-    //     bit_pack.set("Hello", 4, 7);
+    #[test]
+    fn insert_data_four_datas() {
+        let mut bit_pack : BitPack = BitPack::new();
+        bit_pack.set("Hello", 4, 7);
         
-    //     assert_eq!(bit_pack.get_bit_info(0), &BitInfo {
-            
-    //         starting_array_index_inc: 0,
-    //         ending_array_index_exc: 1
-    //     });
+        assert_eq!(bit_pack.get_bit_info(0), &BitInfo {
+            starting_bit_mask : 0b0000_1111,
+            ending_bit_mask : 0b0000_1111,
+            starting_array_index_inc: 0,
+            ending_array_index_exc: 1
+        });
 
-    //     bit_pack.set("World", 4, 6);
+        bit_pack.set("World", 4, 6);
 
-    //     assert_eq!(bit_pack.get_bit_info(1), &BitInfo {
-    //         starting_array_index_inc: 0,
-    //         ending_array_index_exc: 1
-    //     });
+        assert_eq!(bit_pack.get_bit_info(1), &BitInfo {
+            starting_bit_mask : 0b1111_0000,
+            ending_bit_mask : 0b1111_0000,
+            starting_array_index_inc: 0,
+            ending_array_index_exc: 1
+        });
 
-    //     bit_pack.set("Zack", 4, 3);
+        bit_pack.set("Zack", 4, 3);
 
-    //     assert_eq!(bit_pack.get_bit_info(2), &BitInfo {
-    //         starting_array_index_inc: 1,
-    //         ending_array_index_exc: 2
-    //     });
+        assert_eq!(bit_pack.get_bit_info(2), &BitInfo {
+            starting_bit_mask : 0b0000_1111,
+            ending_bit_mask : 0b0000_1111,
+            starting_array_index_inc: 1,
+            ending_array_index_exc: 2
+        });
 
-    //     bit_pack.set("Markd", 5, 30);
+        bit_pack.set("World", 5, 30);
 
-    //     assert_eq!(bit_pack.get_bit_info(2), &BitInfo {
-    //         starting_array_index_inc: 1,
-    //         ending_array_index_exc: 3
-    //     });
-    // }
+        assert_eq!(bit_pack.get_bit_info(3), &BitInfo {
+            starting_bit_mask : 0b1111_0000,
+            ending_bit_mask : 0b0000_0001,
+            starting_array_index_inc: 2,
+            ending_array_index_exc: 3
+        });
+    }
 }
