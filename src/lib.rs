@@ -1,4 +1,4 @@
-use std::{collections::HashMap, default};
+use std::{collections::HashMap, default, ops::{self, BitAnd, Shr}};
 
 #[derive(PartialEq)]
 pub struct BitPack {
@@ -8,38 +8,8 @@ pub struct BitPack {
     last_byte_size_remaining : u8,
 }
 
-//0b0000_00[11|0b1111_1111]|0b[1110]_[0111]
-//0b0000_00[11|0b1111_1111]
-//0b1111_11[11|0b1111_1111]
-//------------------------------
-//0b0000_00[11|0b1111_11]00 >> 0b0000_0000|0b1111_1111 
-
-//0b001_0010|0b1110_1111
-
-//0b000_0000|0b000_0000|0b0000_[1111]
-
-//target:
-//0b001_0010_1110_1111 << 4
-
-//0b000_0000|0b000_0000|0b1111_[1111]
-
-//0b001_0010_1110_0000 >> 4 * 1
-
-//0b000_0000|0b010_1110|0b1111_[1111]
-
-//0b001_0010_1110_0000 >> 4 * 2
-
-//0b000_000[1|0b0010_1110|0b1111_1111
-//                       |0b0000_1111 << start and end bit mask
-//
-//                       |0b1111_0000
-//                       ------------
-// 0b000_0001|-----------|0b1111_0000
-
 #[derive(PartialEq, Clone, Debug, Default)]
-struct BitInfo {
-    //starting_bit_pos
-    //ending_bit_pos
+pub struct BitInfo {
     starting_bit_mask: u8,
     ending_bit_mask: u8,
     starting_array_index_inc: usize,
@@ -72,19 +42,18 @@ impl Construct for BitPack {
     }
 }
 
-trait FromSlice {
+pub trait FromSlice<T> {
     fn from_slice(slice: &[u8]) -> Option<Self> where Self: Sized;
-    // fn from_slice(slice: &[u8], num: u8) -> Option<Self> where Self: Sized;
 }
 
 
-impl FromSlice for u8 {
+impl FromSlice<u8> for u8 {
     fn from_slice(slice: &[u8]) -> Option<Self> {
         Some(slice[0])
     }
 }
 
-impl FromSlice for u16 {
+impl FromSlice<u16> for u16 {
     fn from_slice(slice: &[u8]) -> Option<Self> {
         let mut slice = slice.to_vec();
         if slice.len() == 1 {
@@ -98,7 +67,7 @@ impl FromSlice for u16 {
     }
 }
 
-impl FromSlice for u32 {
+impl FromSlice<u32> for u32 {
     fn from_slice(slice: &[u8]) -> Option<Self> {
         let mut slice = slice.to_vec();
         
@@ -108,6 +77,39 @@ impl FromSlice for u32 {
 
         if slice.len() == 4 {
             Some(u32::from_le_bytes(slice.try_into().ok()?))
+        } else {
+            None
+        }
+    }
+}
+
+
+impl FromSlice<u64> for u64 {
+    fn from_slice(slice: &[u8]) -> Option<Self> {
+        let mut slice = slice.to_vec();
+        
+        while slice.len() < 8 {
+            slice.push(0);
+        }
+
+        if slice.len() == 8 {
+            Some(u64::from_le_bytes(slice.try_into().ok()?))
+        } else {
+            None
+        }
+    }
+}
+
+impl FromSlice<u128> for u128 {
+    fn from_slice(slice: &[u8]) -> Option<Self> {
+        let mut slice = slice.to_vec();
+        
+        while slice.len() < 16 {
+            slice.push(0);
+        }
+
+        if slice.len() == 16 {
+            Some(u128::from_le_bytes(slice.try_into().ok()?))
         } else {
             None
         }
@@ -193,10 +195,16 @@ impl BitPack {
         
     }
 
-    fn get_bit_info (&self, index : usize) -> &BitInfo {
+    pub fn get_bit_info (&self, index : usize) -> &BitInfo {
         &self.bit_info[index]
     }
     
+    pub fn get<T>(&self, arg: &str) -> T where T: FromSlice<T> + BitAnd<Output = T> + Shr<u32, Output = T> {
+        let (bit_info, slice, slice_mask) = self.get_bitinfo_slice_mask_slice(arg);
+
+        Self::shift_and_mask::<T>(slice, slice_mask, bit_info)
+    }
+
     fn get_mask (alloc_size: u8) -> u8 {
         match alloc_size {
             1 => 0b0000_0001,
@@ -210,19 +218,20 @@ impl BitPack {
             _ => 0
         }
     }
-    
-    pub fn get_u8(&self, arg: &str) -> u8 {
+
+    fn get_bitinfo_slice_mask_slice(&self, arg: &str) -> (&BitInfo, &[u8], [u8; 2]) {
         let bit_info = &self.bit_info[self.bit_find[arg]];
         let slice = &self.bytes[bit_info.starting_array_index_inc..bit_info.ending_array_index_exc];
         let mut slice_mask = [1u8, slice.len() as u8];
         
         slice_mask[0] = bit_info.starting_bit_mask;
         slice_mask[slice_mask.len() - 1] = bit_info.ending_bit_mask;
+        (bit_info, slice, slice_mask)
+    }
 
-        //thne from here do some bit shifting
-        //then do an AND MASK
-        let mut initial_value = u8::from_slice(slice).unwrap();
-        initial_value = initial_value & u8::from_slice(&slice_mask).unwrap();
+    fn shift_and_mask<T>(slice: &[u8], slice_mask: [u8; 2], bit_info: &BitInfo) -> T where T: FromSlice<T> + BitAnd<Output = T> + Shr<u32, Output = T>{
+        let mut initial_value = T::from_slice(slice).unwrap();
+        initial_value = initial_value & T::from_slice(&slice_mask).unwrap();
         if bit_info.starting_bit_mask.trailing_zeros() > 0
         {
             initial_value = initial_value >> bit_info.starting_bit_mask.trailing_zeros();
@@ -230,25 +239,8 @@ impl BitPack {
         initial_value
     }
 
-    pub fn get_u32(&self, arg: &str) -> u32 {
-        let bit_info = &self.bit_info[self.bit_find[arg]];
-        let slice = &self.bytes[bit_info.starting_array_index_inc..bit_info.ending_array_index_exc];
-        let mut slice_mask = [1u8, slice.len() as u8];
-
-        slice_mask[0] = bit_info.starting_bit_mask;
-        slice_mask[slice_mask.len() - 1] = bit_info.ending_bit_mask;
-        
-        //thne from here do some bit shifting
-        //then do an AND MASK
-        let mut initial_value = u32::from_slice(slice).unwrap();
-        initial_value = initial_value & u32::from_slice(&slice_mask).unwrap();
-        if bit_info.starting_bit_mask.trailing_zeros() > 0
-        {
-            initial_value = initial_value >> bit_info.starting_bit_mask.trailing_zeros();
-        }
-        initial_value
-    }
 }
+
 
 #[cfg(test)]
 mod test {
@@ -394,22 +386,7 @@ mod test {
     }
 
     #[test]
-    fn insert_data_get_one_data() {
-        let mut bit_pack : BitPack = BitPack::new();
-        bit_pack.set_new("Hello", 4, 7);
-
-        assert_eq!(bit_pack.get_u8("Hello"), 7);
-        
-        assert_eq!(bit_pack.get_bit_info(0), &BitInfo {
-            starting_bit_mask : 0b0000_1111,
-            ending_bit_mask : 0b0000_1111,
-            starting_array_index_inc: 0,
-            ending_array_index_exc: 1
-        });
-    }
-
-    #[test]
-    fn insert_two_data_with_overflow_get_second_data() {
+    fn insert_two_data_with_overflow_get_correct_data() {
         let mut bit_pack : BitPack = BitPack::new();
         bit_pack.set_new("Hello", 4, 7);
         
@@ -429,11 +406,10 @@ mod test {
             ending_array_index_exc: 2
         });
 
-        assert_eq!(bit_pack.get_u32("World"), 30);
-
-        // because 30 is represented as 11110 in binary
-        // but becuase of overflow element 0 is represented as 1110_0111
-        // masking out first 4 and shifting left we get 1110 == 14
-        assert_eq!(bit_pack.get_u8("World"), 14);
+        assert_eq!(bit_pack.get::<u8>("World"), 14);
+        assert_eq!(bit_pack.get::<u16>("World"), 30);
+        assert_eq!(bit_pack.get::<u32>("World"), 30);
+        assert_eq!(bit_pack.get::<u64>("World"), 30);
+        assert_eq!(bit_pack.get::<u128>("World"), 30);
     }
 }

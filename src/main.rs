@@ -2,8 +2,8 @@ use rs_custom_bit_width_packer::{BitPack, Construct};
 
 fn main () {
     let mut bit_pack = BitPack::new();
-    bit_pack.set("Hello", 4, 7);
-    bit_pack.set("World", 4, 6);
+    bit_pack.set_new("Hello", 4, 7);
+    bit_pack.set_new("World", 4, 6);
 
     //store both array 0
     //0b0000_0111
