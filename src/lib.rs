@@ -1,4 +1,4 @@
-use std::{collections::HashMap, default, ops::{self, BitAnd, Shr}};
+use std::{collections::HashMap, ops::{BitAnd, Shr}};
 
 #[derive(PartialEq)]
 pub struct BitPack {
@@ -56,7 +56,7 @@ impl FromSlice<u8> for u8 {
 impl FromSlice<u16> for u16 {
     fn from_slice(slice: &[u8]) -> Option<Self> {
         let mut slice = slice.to_vec();
-        if slice.len() == 1 {
+        if slice.len() < 2 {
             slice.push(0);
         }
         if slice.len() == 2 {

@@ -1,6 +1,7 @@
 [package]
-name = "rs-custom-bit-width-packer"
+name = "rs-bit-packer"
 version = "0.1.0"
 edition = "2021"
-
-[dependencies]
+license = "LICENSE"
+rust-version = "1.79.0"
+description = "rs-custom-bit-packer, just packing bits"

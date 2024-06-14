@@ -3,5 +3,5 @@
 version = 3
 
 [[package]]
-name = "rs-custom-bit-width-packer"
+name = "rs-bit-packer"
 version = "0.1.0"
