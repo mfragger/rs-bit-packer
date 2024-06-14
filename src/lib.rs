@@ -8,8 +8,38 @@ pub struct BitPack {
     last_byte_size_remaining : u8,
 }
 
+//0b0000_00[11|0b1111_1111]|0b[1110]_[0111]
+//0b0000_00[11|0b1111_1111]
+//0b1111_11[11|0b1111_1111]
+//------------------------------
+//0b0000_00[11|0b1111_11]00 >> 0b0000_0000|0b1111_1111 
+
+//0b001_0010|0b1110_1111
+
+//0b000_0000|0b000_0000|0b0000_[1111]
+
+//target:
+//0b001_0010_1110_1111 << 4
+
+//0b000_0000|0b000_0000|0b1111_[1111]
+
+//0b001_0010_1110_0000 >> 4 * 1
+
+//0b000_0000|0b010_1110|0b1111_[1111]
+
+//0b001_0010_1110_0000 >> 4 * 2
+
+//0b000_000[1|0b0010_1110|0b1111_1111
+//                       |0b0000_1111 << start and end bit mask
+//
+//                       |0b1111_0000
+//                       ------------
+// 0b000_0001|-----------|0b1111_0000
+
 #[derive(PartialEq, Clone, Debug, Default)]
 struct BitInfo {
+    //starting_bit_pos
+    //ending_bit_pos
     starting_bit_mask: u8,
     ending_bit_mask: u8,
     starting_array_index_inc: usize,
@@ -42,10 +72,52 @@ impl Construct for BitPack {
     }
 }
 
-impl BitPack {
-    pub fn set(&mut self, name: &str, to_alloc_size: u8, initial_value: u8) {
+trait FromSlice {
+    fn from_slice(slice: &[u8]) -> Option<Self> where Self: Sized;
+    // fn from_slice(slice: &[u8], num: u8) -> Option<Self> where Self: Sized;
+}
 
-        if to_alloc_size == 0{
+
+impl FromSlice for u8 {
+    fn from_slice(slice: &[u8]) -> Option<Self> {
+        Some(slice[0])
+    }
+}
+
+impl FromSlice for u16 {
+    fn from_slice(slice: &[u8]) -> Option<Self> {
+        let mut slice = slice.to_vec();
+        if slice.len() == 1 {
+            slice.push(0);
+        }
+        if slice.len() == 2 {
+            Some(u16::from_le_bytes(slice.try_into().ok()?))
+        } else {
+            None
+        }
+    }
+}
+
+impl FromSlice for u32 {
+    fn from_slice(slice: &[u8]) -> Option<Self> {
+        let mut slice = slice.to_vec();
+        
+        while slice.len() < 4 {
+            slice.push(0);
+        }
+
+        if slice.len() == 4 {
+            Some(u32::from_le_bytes(slice.try_into().ok()?))
+        } else {
+            None
+        }
+    }
+}
+
+impl BitPack {
+    pub fn set_new(&mut self, name: &str, to_alloc_size: u8, initial_value: u8) {
+
+        if to_alloc_size == 0 {
             println!("to_alloc cannot be used");
             return;
         }
@@ -58,7 +130,13 @@ impl BitPack {
             println!("make new space!!! but how many??");
             result = (to_alloc_size as f32 / 8f32).ceil() as usize;
             self.bytes.extend(vec![0; result]);
-            starting_index = self.bytes.len() - 1;
+
+            starting_index = if self.last_byte_size_remaining > 0 { 
+                starting_index
+            } else {
+                self.bytes.len() - 1
+            };
+
             self.last_byte_size_remaining += 8 * result as u8;
         }
 
@@ -91,11 +169,7 @@ impl BitPack {
             }
 
             //OR MASK
-            self.bytes[ if last_bit_info.ending_array_index_exc <= 0 {
-                0
-            } else {
-                last_bit_info.ending_array_index_exc - 1
-            }] |= shifted_value;
+            self.bytes[i] |= shifted_value;
 
             //Store info
             if i == 0 {
@@ -136,6 +210,44 @@ impl BitPack {
             _ => 0
         }
     }
+    
+    pub fn get_u8(&self, arg: &str) -> u8 {
+        let bit_info = &self.bit_info[self.bit_find[arg]];
+        let slice = &self.bytes[bit_info.starting_array_index_inc..bit_info.ending_array_index_exc];
+        let mut slice_mask = [1u8, slice.len() as u8];
+        
+        slice_mask[0] = bit_info.starting_bit_mask;
+        slice_mask[slice_mask.len() - 1] = bit_info.ending_bit_mask;
+
+        //thne from here do some bit shifting
+        //then do an AND MASK
+        let mut initial_value = u8::from_slice(slice).unwrap();
+        initial_value = initial_value & u8::from_slice(&slice_mask).unwrap();
+        if bit_info.starting_bit_mask.trailing_zeros() > 0
+        {
+            initial_value = initial_value >> bit_info.starting_bit_mask.trailing_zeros();
+        }
+        initial_value
+    }
+
+    pub fn get_u32(&self, arg: &str) -> u32 {
+        let bit_info = &self.bit_info[self.bit_find[arg]];
+        let slice = &self.bytes[bit_info.starting_array_index_inc..bit_info.ending_array_index_exc];
+        let mut slice_mask = [1u8, slice.len() as u8];
+
+        slice_mask[0] = bit_info.starting_bit_mask;
+        slice_mask[slice_mask.len() - 1] = bit_info.ending_bit_mask;
+        
+        //thne from here do some bit shifting
+        //then do an AND MASK
+        let mut initial_value = u32::from_slice(slice).unwrap();
+        initial_value = initial_value & u32::from_slice(&slice_mask).unwrap();
+        if bit_info.starting_bit_mask.trailing_zeros() > 0
+        {
+            initial_value = initial_value >> bit_info.starting_bit_mask.trailing_zeros();
+        }
+        initial_value
+    }
 }
 
 #[cfg(test)]
@@ -147,7 +259,7 @@ mod test {
     #[test]
     fn insert_data_one_data() {
         let mut bit_pack : BitPack = BitPack::new();
-        bit_pack.set("Hello", 4, 7);
+        bit_pack.set_new("Hello", 4, 7);
         
         assert_eq!(bit_pack.get_bit_info(0), &BitInfo {
             starting_bit_mask : 0b0000_1111,
@@ -160,7 +272,7 @@ mod test {
     #[test]
     fn insert_data_two_datas() {
         let mut bit_pack : BitPack = BitPack::new();
-        bit_pack.set("Hello", 4, 7);
+        bit_pack.set_new("Hello", 4, 7);
         
         assert_eq!(bit_pack.get_bit_info(0), &BitInfo {
             starting_bit_mask : 0b0000_1111,
@@ -169,7 +281,7 @@ mod test {
             ending_array_index_exc: 1
         });
 
-        bit_pack.set("World", 4, 6);
+        bit_pack.set_new("World", 4, 6);
 
         assert_eq!(bit_pack.get_bit_info(1), &BitInfo {
             starting_bit_mask : 0b1111_0000,
@@ -182,8 +294,10 @@ mod test {
     #[test]
     fn insert_data_two_datas_with_overflow() {
         let mut bit_pack : BitPack = BitPack::new();
-        bit_pack.set("Hello", 4, 7);
+        bit_pack.set_new("Hello", 4, 7);
         
+        //0b0000_1111
+
         assert_eq!(bit_pack.get_bit_info(0), &BitInfo {
             starting_bit_mask : 0b0000_1111,
             ending_bit_mask : 0b0000_1111,
@@ -191,7 +305,14 @@ mod test {
             ending_array_index_exc: 1
         });
 
-        bit_pack.set("World", 5, 30);
+            
+        bit_pack.set_new("World", 5, 30);
+        
+        //0b0000_1111
+        //0b0000_0000|0b0000_1111
+
+        //0b0000_0000|0b0000_1111
+        //0b0000_0001|0b1111_1111
 
         assert_eq!(bit_pack.get_bit_info(1), &BitInfo {
             starting_bit_mask : 0b1111_0000,
@@ -204,7 +325,7 @@ mod test {
     #[test]
     fn insert_data_three_datas() {
         let mut bit_pack : BitPack = BitPack::new();
-        bit_pack.set("Hello", 4, 7);
+        bit_pack.set_new("Hello", 4, 7);
         
         assert_eq!(bit_pack.get_bit_info(0), &BitInfo {
             starting_bit_mask : 0b0000_1111,
@@ -213,7 +334,7 @@ mod test {
             ending_array_index_exc: 1
         });
 
-        bit_pack.set("World", 4, 6);
+        bit_pack.set_new("World", 4, 6);
 
         assert_eq!(bit_pack.get_bit_info(1), &BitInfo {
             starting_bit_mask : 0b1111_0000,
@@ -222,7 +343,7 @@ mod test {
             ending_array_index_exc: 1
         });
 
-        bit_pack.set("Zack", 4, 3);
+        bit_pack.set_new("Zack", 4, 3);
 
         assert_eq!(bit_pack.get_bit_info(2), &BitInfo {
             starting_bit_mask : 0b0000_1111,
@@ -235,7 +356,7 @@ mod test {
     #[test]
     fn insert_data_four_datas() {
         let mut bit_pack : BitPack = BitPack::new();
-        bit_pack.set("Hello", 4, 7);
+        bit_pack.set_new("Hello", 4, 7);
         
         assert_eq!(bit_pack.get_bit_info(0), &BitInfo {
             starting_bit_mask : 0b0000_1111,
@@ -244,7 +365,7 @@ mod test {
             ending_array_index_exc: 1
         });
 
-        bit_pack.set("World", 4, 6);
+        bit_pack.set_new("World", 4, 6);
 
         assert_eq!(bit_pack.get_bit_info(1), &BitInfo {
             starting_bit_mask : 0b1111_0000,
@@ -253,7 +374,7 @@ mod test {
             ending_array_index_exc: 1
         });
 
-        bit_pack.set("Zack", 4, 3);
+        bit_pack.set_new("Zack", 4, 3);
 
         assert_eq!(bit_pack.get_bit_info(2), &BitInfo {
             starting_bit_mask : 0b0000_1111,
@@ -262,13 +383,57 @@ mod test {
             ending_array_index_exc: 2
         });
 
-        bit_pack.set("World", 5, 30);
+        bit_pack.set_new("World", 5, 30);
 
         assert_eq!(bit_pack.get_bit_info(3), &BitInfo {
             starting_bit_mask : 0b1111_0000,
             ending_bit_mask : 0b0000_0001,
-            starting_array_index_inc: 2,
+            starting_array_index_inc: 1,
             ending_array_index_exc: 3
         });
+    }
+
+    #[test]
+    fn insert_data_get_one_data() {
+        let mut bit_pack : BitPack = BitPack::new();
+        bit_pack.set_new("Hello", 4, 7);
+
+        assert_eq!(bit_pack.get_u8("Hello"), 7);
+        
+        assert_eq!(bit_pack.get_bit_info(0), &BitInfo {
+            starting_bit_mask : 0b0000_1111,
+            ending_bit_mask : 0b0000_1111,
+            starting_array_index_inc: 0,
+            ending_array_index_exc: 1
+        });
+    }
+
+    #[test]
+    fn insert_two_data_with_overflow_get_second_data() {
+        let mut bit_pack : BitPack = BitPack::new();
+        bit_pack.set_new("Hello", 4, 7);
+        
+        assert_eq!(bit_pack.get_bit_info(0), &BitInfo {
+            starting_bit_mask : 0b0000_1111,
+            ending_bit_mask : 0b0000_1111,
+            starting_array_index_inc: 0,
+            ending_array_index_exc: 1
+        });
+
+        bit_pack.set_new("World", 5, 30);
+
+        assert_eq!(bit_pack.get_bit_info(1), &BitInfo {
+            starting_bit_mask : 0b1111_0000,
+            ending_bit_mask : 0b0000_0001,
+            starting_array_index_inc: 0,
+            ending_array_index_exc: 2
+        });
+
+        assert_eq!(bit_pack.get_u32("World"), 30);
+
+        // because 30 is represented as 11110 in binary
+        // but becuase of overflow element 0 is represented as 1110_0111
+        // masking out first 4 and shifting left we get 1110 == 14
+        assert_eq!(bit_pack.get_u8("World"), 14);
     }
 }
