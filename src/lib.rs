@@ -46,60 +46,6 @@ pub trait FromSlice<T> {
     fn from_slice(slice: &[u8]) -> Option<Self> where Self: Sized;
 }
 
-
-impl FromSlice<u8> for u8 {
-    fn from_slice(slice: &[u8]) -> Option<Self> {
-        Some(slice[0])
-    }
-}
-
-impl FromSlice<u16> for u16 {
-    fn from_slice(slice: &[u8]) -> Option<Self> {
-        let mut slice = slice.to_vec();
-        if slice.len() < 2 {
-            slice.push(0);
-        }
-        if slice.len() == 2 {
-            Some(u16::from_le_bytes(slice.try_into().ok()?))
-        } else {
-            None
-        }
-    }
-}
-
-impl FromSlice<u32> for u32 {
-    fn from_slice(slice: &[u8]) -> Option<Self> {
-        let mut slice = slice.to_vec();
-        
-        while slice.len() < 4 {
-            slice.push(0);
-        }
-
-        if slice.len() == 4 {
-            Some(u32::from_le_bytes(slice.try_into().ok()?))
-        } else {
-            None
-        }
-    }
-}
-
-
-impl FromSlice<u64> for u64 {
-    fn from_slice(slice: &[u8]) -> Option<Self> {
-        let mut slice = slice.to_vec();
-        
-        while slice.len() < 8 {
-            slice.push(0);
-        }
-
-        if slice.len() == 8 {
-            Some(u64::from_le_bytes(slice.try_into().ok()?))
-        } else {
-            None
-        }
-    }
-}
-
 impl FromSlice<u128> for u128 {
     fn from_slice(slice: &[u8]) -> Option<Self> {
         let mut slice = slice.to_vec();
@@ -199,10 +145,15 @@ impl BitPack {
         &self.bit_info[index]
     }
     
-    pub fn get<T>(&self, arg: &str) -> T where T: FromSlice<T> + BitAnd<Output = T> + Shr<u32, Output = T> {
-        let (bit_info, slice, slice_mask) = self.get_bitinfo_slice_mask_slice(arg);
+    pub fn get<T>(&self, arg: &str) -> T where T: TryFrom<u128> {
 
-        Self::shift_and_mask::<T>(slice, slice_mask, bit_info)
+        let (bit_info, slice, slice_mask) = self.get_bitinfo_slice_mask_slice(arg);
+        let result = Self::shift_and_mask(slice, slice_mask, bit_info);
+        
+        match T::try_from(result) {
+            Ok(value) => value,
+            Err(_) => panic!("It doesn't work!")
+        }
     }
 
     fn get_mask (alloc_size: u8) -> u8 {
@@ -229,15 +180,15 @@ impl BitPack {
         (bit_info, slice, slice_mask)
     }
 
-    fn shift_and_mask<T>(slice: &[u8], slice_mask: [u8; 2], bit_info: &BitInfo) -> T where T: FromSlice<T> + BitAnd<Output = T> + Shr<u32, Output = T>{
-        let mut initial_value = T::from_slice(slice).unwrap();
-        initial_value = initial_value & T::from_slice(&slice_mask).unwrap();
+    fn shift_and_mask(slice: &[u8], slice_mask: [u8; 2], bit_info: &BitInfo) -> u128 {
+        let mut initial_value = u128::from_slice(slice).unwrap();
+        initial_value = initial_value & u128::from_slice(&slice_mask).unwrap();
         if bit_info.starting_bit_mask.trailing_zeros() > 0
         {
             initial_value = initial_value >> bit_info.starting_bit_mask.trailing_zeros();
         }
-        initial_value
-    }
+       initial_value 
+    } 
 
 }
 
@@ -299,12 +250,7 @@ mod test {
 
             
         bit_pack.set_new("World", 5, 30);
-        
-        //0b0000_1111
-        //0b0000_0000|0b0000_1111
-
-        //0b0000_0000|0b0000_1111
-        //0b0000_0001|0b1111_1111
+    
 
         assert_eq!(bit_pack.get_bit_info(1), &BitInfo {
             starting_bit_mask : 0b1111_0000,
@@ -406,10 +352,20 @@ mod test {
             ending_array_index_exc: 2
         });
 
-        assert_eq!(bit_pack.get::<u8>("World"), 14);
+        assert_eq!(bit_pack.get::<u8>("World"), 30);
+        assert_eq!(bit_pack.get::<u8>("World").leading_zeros(), 3);
+
         assert_eq!(bit_pack.get::<u16>("World"), 30);
+        assert_eq!(bit_pack.get::<u16>("World").leading_zeros(), 11);
+
         assert_eq!(bit_pack.get::<u32>("World"), 30);
+        assert_eq!(bit_pack.get::<u32>("World").leading_zeros(), 27);
+
         assert_eq!(bit_pack.get::<u64>("World"), 30);
+        assert_eq!(bit_pack.get::<u64>("World").leading_zeros(), 59);
+
         assert_eq!(bit_pack.get::<u128>("World"), 30);
+        assert_eq!(bit_pack.get::<u128>("World").leading_zeros(), 123);
+
     }
 }

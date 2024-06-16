@@ -1,14 +1,14 @@
-# rs-custom-bit-packer
+# rs-bit-packer
 
 ## Overview
+A simple project that stores a number with arbitrary size of bits into an array of u8's.
 
 ### Putting it in
-A simple project that stores a number with arbitrary size of bits into an array of u8's.
 
 Example: Assume that we have the following pseudo code declaration.
 
 ```rs
-bit_pack.set_new(name: "Hello", to_alloc_size: 4, initial_size: 7)
+bit_pack.set_new(name: "Hello", to_alloc_size: 4, initial_data: 7)
 ```
 
 This tells the bit-packer to store the number 7 onto the array of u8s with size 4.
@@ -29,13 +29,13 @@ like so:
 
 ```rs
 //from earlier
-bit_pack.set_new(name: "Hello", to_alloc_size: 4, initial_size: 7)
+bit_pack.set_new(name: "Hello", to_alloc_size: 4, initial_data: 7)
 
 //result:
 0000[0111]
 
 //set another one
-bit_pack.set_new(name: "World", to_alloc_size: 4, initial_size: 6)
+bit_pack.set_new(name: "World", to_alloc_size: 4, initial_data: 6)
 
 //result:
 [0110][0111]
@@ -49,13 +49,13 @@ Answer: we simply create a new element, in rust we just ``push(0)`` and put the 
 
 ```rs
 //from earlier
-bit_pack.set_new(name: "Hello", to_alloc_size: 4, initial_size: 7)
+bit_pack.set_new(name: "Hello", to_alloc_size: 4, initial_data: 7)
 
 //result: 4-bits are remaining to be allocated.
 0000[0111]
 
 //set another one
-bit_pack.set_new(name: "Word", to_alloc_size: 5, initial_size: 30)
+bit_pack.set_new(name: "Word", to_alloc_size: 5, initial_data: 30)
 
 //result: comma denotes a separation of elements.
 000000[1,1110][0111]
@@ -87,25 +87,23 @@ Consider the following.
 
 ```rs
 //from earlier
-bit_pack.set_new(name: "Hello", to_alloc_size: 4, initial_size: 7)
+bit_pack.set_new(name: "Hello", to_alloc_size: 4, initial_data: 7)
 
 //result: 4-bits are remaining to be allocated.
 0000[0111]
 
 //set another one
-bit_pack.set_new(name: "Word", to_alloc_size: 5, initial_size: 30)
+bit_pack.set_new(name: "Word", to_alloc_size: 5, initial_data: 30)
 
 //result: comma denotes a separation of elements.
 000000[1,1110][0111]
 
 bit_pack.get::<u16>(name: "Word") //outputs as 30
 
-bit_pack.get::<u8>(name: "Word") //outputs as 14 
+bit_pack.get::<u8>(name: "Word") //outputs as 30
 ```
 
-The reason why declaring ``u8`` outputs 14 is because of loss of data. 
-
-~~And also skill issue~~
+As you can see, with an ``alloc size`` of 5, it can fit into u8 and u16 so it can be casted as u8 or u16.
 
 ## Motivation
 
@@ -114,11 +112,3 @@ Because I can.
 And also the idea spawned from wanting to create custom bit widths that's found in C but it evolved into some sort of packer.
 
 And also it was fun to do this.
-
-## Future features
-
-Here's the following features that I wish to add.
-
-- [ ] a more intuitive getter
-- [ ] modify a variable that's in the pack.
-- [ ] redeclare variable name
